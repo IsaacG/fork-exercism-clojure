@@ -5,24 +5,35 @@
             [clojure.string :as str]
             [log]
             [paths])
-  (:import [com.github.jknack.handlebars EscapingStrategy]))
+  (:import [com.github.jknack.handlebars Formatter EscapingStrategy]))
 
-(defhelper list-helper [ctx options]
-  (let [s (seq ctx)]
-    (safe-str (str "'" (if (empty? s) "()" s)))))
+(defn format-string [s _next]
+  (str "\"" (str/escape s char-escape-string) "\""))
 
-(defhelper string-helper [ctx options]
-  (safe-str (str "\"" (str/escape ctx char-escape-string) "\"")))
+(defn format-list [coll next]
+  (let [elements (into [] coll)]
+    (if (empty? elements)
+      (str "'()")
+      (str "'" elements))))
+
+(defn formatter [test conv]
+  (proxy [Formatter] []
+    (format [value next]
+      (if (test value)
+        (conv value next)
+        (. next format value)))))
+
+(def reg
+  (-> *hbs*
+      (.  with EscapingStrategy/NOOP)
+      (. with (formatter string? format-string))
+      (. with (formatter list? format-list))))
 
 (defhelper ifzero [ctx options]
   (if (zero? ctx)
     (block-body options ctx)
     (else-body options ctx)))
 
-(def reg (. *hbs* with EscapingStrategy/NOOP))
-
-(register-helper! reg "list" list-helper)
-(register-helper! reg "string" string-helper)
 (register-helper! reg "ifequals" ifequals)
 (register-helper! reg "ifgreater" ifgreater)
 (register-helper! reg "ifless" ifless)
